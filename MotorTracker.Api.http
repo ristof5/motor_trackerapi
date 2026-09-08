@@ -1,0 +1,13 @@
+### Mengambil semua motor
+GET http://localhost:5054/api/vehicles
+Accept: application/json
+
+### Menambahkan motor baru
+POST http://localhost:5054/api/vehicles
+Content-Type: application/json
+
+{
+  "name": "NMAX 155",
+  "brand": "Yamaha",
+  "currentMileage": 15000
+}
