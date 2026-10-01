@@ -72,5 +72,53 @@ app.MapDelete("/api/vehicles/{id}", async (int id, AppDbContext db) =>
 });
 
 // ==============================================================
+// BLOK API UNTUK SERVICE HISTORY
+// ==============================================================
+// FITUR PREDIKSI DINAMIS (Multi-Sparepart)
+app.MapGet("/api/vehicles/{id}/reminder", async (int id, AppDbContext db) =>
+{
+    var vehicle = await db.Vehicles.FindAsync(id);
+    if (vehicle is null) return Results.NotFound("Motor tidak ditemukan");
+
+    // 1. Ambil SEMUA jenis konfigurasi servis dari database
+    var configs = await db.ServiceConfigs.ToListAsync();
+    var report = new List<object>(); // Keranjang untuk menyimpan hasil laporan
+
+    // 2. Looping (Cek satu per satu setiap sparepart)
+    foreach (var config in configs)
+    {
+        // Cari riwayat servis terakhir berdasarkan nama part-nya (misal mencari kata "Oli")
+        var lastService = await db.MaintenanceLogs
+            .Where(l => l.VehicleId == id && l.ServiceType.Contains(config.PartName))
+            .OrderByDescending(l => l.ServiceDate)
+            .FirstOrDefaultAsync();
+
+        if (lastService is null)
+        {
+            report.Add(new { Part = config.PartName, Status = "Belum Ada Riwayat" });
+            continue;
+        }
+
+        // 3. Kalkulasi Dinamis (Memakai config.IntervalKm dari database, bukan angka 2000 hardcode lagi!)
+        int targetKm = lastService.MileageAtService + config.IntervalKm;
+        int remainingKm = targetKm - vehicle.CurrentMileage;
+
+        string statusText = remainingKm <= 0 ? "BAHAYA: Segera Ganti!" : 
+                            (remainingKm <= 200 ? "PERINGATAN: Sudah Dekat" : "AMAN");
+
+        report.Add(new {
+            Part = config.PartName,
+            Status = statusText,
+            RemainingMileage = remainingKm,
+            TargetNextService = targetKm
+        });
+    }
+
+    return Results.Ok(new {
+        VehicleName = vehicle.Name,
+        CurrentMileage = vehicle.CurrentMileage,
+        HealthReport = report // Menampilkan laporan semua sparepart sekaligus!
+    });
+});
 
 app.Run();
